@@ -53,7 +53,7 @@
 
 # MAGIC %sql
 # MAGIC -- TODO
-# MAGIC ALTER TABLE -- <FILL-IN>
+# MAGIC ALTER TABLE heart_rate_silver ADD CONSTRAINT dateWithinRange CHECK (time > '2017-01-01'); -- <FILL-IN>
 
 # COMMAND ----------
 
@@ -117,10 +117,39 @@ class Upsert:
 
 # COMMAND ----------
 
+use_deltatables = True
+
+# COMMAND ----------
+
 # TODO
-sql_query = """<FILL-IN>"""
- 
-streaming_merge=Upsert(sql_query)
+if use_deltatables:
+    # Method 2 with the DeltaTable API
+    from delta.tables import *
+
+    slvr = DeltaTable.forName(spark, 'heart_rate_silver')
+
+
+    # follow same fn signature as the upsert_to_delta method of the Upsert class
+    def process_batch(micro_batch_df, batch):
+        (slvr.alias('a')
+             .merge(micro_batch_df.alias('b'), 
+                    'a.device_id = b.device_id AND a.time=b.time')
+             .whenNotMatchedInsertAll()
+             .execute()
+        )
+else:
+    # Method 1  with the SQL in text
+    sql_query = """
+    MERGE INTO heart_rate_silver a
+    USING stream_updates b
+    ON a.device_id=b.device_id AND a.time=b.time
+    WHEN NOT MATCHED THEN INSERT *
+    """
+
+    streaming_merge=Upsert(sql_query)
+    
+    process_batch = streaming_merge.upsert_to_delta
+
 
 # COMMAND ----------
 
@@ -132,7 +161,7 @@ streaming_merge=Upsert(sql_query)
 
 def process_silver_heartrate():
     query = (streaming_df.writeStream
-                         .foreachBatch(streaming_merge.upsert_to_delta)
+                         .foreachBatch(process_batch)
                          .outputMode("update")
                          .option("checkpointLocation", f"{DA.paths.checkpoints}/recordings")
                          .trigger(availableNow=True)
@@ -140,6 +169,11 @@ def process_silver_heartrate():
     query.awaitTermination()
     
 process_silver_heartrate()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Attempt implementation with the `DeltaTable` class in python
 
 # COMMAND ----------
 
