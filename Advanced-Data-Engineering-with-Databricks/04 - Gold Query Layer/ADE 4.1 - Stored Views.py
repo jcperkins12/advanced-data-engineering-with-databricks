@@ -81,10 +81,24 @@ gymDF.explain("formatted")
 # COMMAND ----------
 
 # MAGIC %sql
+# MAGIC DESCRIBE TABLE completed_workouts;
+
+# COMMAND ----------
+
+# MAGIC %sql
 # MAGIC -- TODO
-# MAGIC SELECT * 
+# MAGIC SELECT user_id 
 # MAGIC FROM completed_workouts
-# MAGIC LIMIT 10
+# MAGIC LIMIT 10;
+# MAGIC 
+# MAGIC SELECT 
+# MAGIC   user_id, 
+# MAGIC   to_date(start_time) date,
+# MAGIC   min(start_time) first_start,
+# MAGIC   max(end_time) last_end,
+# MAGIC   collect_set(workout_id)
+# MAGIC FROM completed_workouts
+# MAGIC GROUP BY user_id, to_date(start_time);
 
 # COMMAND ----------
 
@@ -124,7 +138,18 @@ gymDF.explain("formatted")
 
 # MAGIC %sql
 # MAGIC -- TODO
-# MAGIC CREATE YOUR VIEW HERE
+# MAGIC CREATE VIEW IF NOT EXISTS gym_user_stats AS (
+# MAGIC   SELECT gym, mac_address, date, workouts, (last_timestamp - first_timestamp)/60 minutes_in_gym, (to_unix_timestamp(end_workout) - to_unix_timestamp(start_workout))/60 minutes_exercising
+# MAGIC   FROM gym_mac_logs c
+# MAGIC   INNER JOIN (
+# MAGIC     SELECT b.mac_address, to_date(start_time) date, collect_set(workout_id) workouts, min(start_time) start_workout, max(end_time) end_workout
+# MAGIC         FROM completed_workouts a
+# MAGIC         INNER JOIN user_lookup b
+# MAGIC         ON a.user_id = b.user_id
+# MAGIC         GROUP BY mac_address, to_date(start_time)
+# MAGIC     ) d
+# MAGIC     ON c.mac = d.mac_address AND to_date(CAST(c.first_timestamp AS timestamp)) = d.date
+# MAGIC )
 
 # COMMAND ----------
 
